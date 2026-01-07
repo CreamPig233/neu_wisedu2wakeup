@@ -79,7 +79,7 @@ def convert_arranged(schedule_list):
             week = i.split(" ")[0]
             placeName = i.split(" ")[-1]
             if placeName.endswith("校区"):
-                placeName = "暂未排课"
+                placeName = "暂未安排教室"
             
             append_list.append(courseName)
             append_list.append(dayOfWeek)
@@ -107,11 +107,11 @@ def get_termcode():
     if inputtermcode != "":
         codes = inputtermcode.split("-")
         if len(codes) != 3:
-            print("学期代码格式错误，使用默认学期代码")
+            print("学期代码格式错误，使用默认学期")
         elif codes[2] not in ["1", "2", "3"]:
-            print("学期代码格式错误，使用默认学期代码")
+            print("学期代码格式错误，使用默认学期")
         elif int(codes[0]) + 1 != int(codes[1]):
-            print("学期代码格式错误，使用默认学期代码")
+            print("学期代码格式错误，使用默认学期")
         else:
             termcode = inputtermcode
         
@@ -133,7 +133,6 @@ def print_welcome():
     
 if __name__ == "__main__":
     neucas_qr_login()
-    print("账号登陆成功！")
     print_welcome()
     termcode = get_termcode()
     campuscode = get_campuscode(termcode)
