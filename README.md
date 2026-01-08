@@ -11,8 +11,19 @@
 
 ## 如何使用
 
+### Python 脚本
+
 (右侧 Release 可以下载预编译版本)
 
 1. 打开程序，使用绑定了东北大学微信企业号的微信扫描程序显示的二维码
 2. 扫描二维码，在微信点击授权登录后，在程序中按下回车键，等待运行结束
 3. 在程序同目录找到schedule.csv，使用WakeUP课程表导入该文件。[如何导入？](https://wakeup.fun/doc/import_from_csv.html)
+
+### JS 脚本
+
+1. 复制 [extract_schedule.js](extract_schedule.js) 的全部代码
+2. 浏览器登录 [东北大学本科教学网](https://jwxt.neu.edu.cn/)
+3. 按 F12 打开开发者工具，点击控制台 (Console) 标签页
+4. 粘贴代码并按回车运行
+5. 脚本会自动下载 `schedule_*-*-*.csv` 文件
+6. 使用 WakeUP 课程表导入该文件。[如何导入？](https://wakeup.fun/doc/import_from_csv.html)
