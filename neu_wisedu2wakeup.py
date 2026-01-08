@@ -10,6 +10,7 @@ urllib3.disable_warnings()
 session = requests.Session()
 
 def neucas_qr_login():
+    print("请使用微信扫码登录")
     u_uuid = str(uuid.uuid4())
     u_qrurl = f"https://pass.neu.edu.cn/tpass/qyQrLogin?uuid={u_uuid}"
     u_checkurl = f"https://pass.neu.edu.cn/tpass/checkQRCodeScan?random={random.random():.16f}&uuid={u_uuid}"
@@ -17,7 +18,6 @@ def neucas_qr_login():
     qr.add_data(u_qrurl)
     qr.make(fit=True)
     qr.print_ascii(invert=True)
-    print("请使用微信扫码登录")
     input("手机端确认登录后请按回车继续...")
     global session
     session.get(u_checkurl)
@@ -132,6 +132,15 @@ def print_welcome():
     print(f"欢迎您，{username} ({userid})！")
     
 if __name__ == "__main__":
+    print("==========使用教程==========")
+    print("1.打开程序，使用绑定了东北大学微信企业号的微信扫描程序显示的二维码")
+    print("2.扫描二维码，在微信点击授权登录后，在程序中按下回车键，等待运行结束")
+    print("3.在程序同目录找到schedule.csv，使用WakeUP课程表导入该文件。")
+    print("   如何导入? https://wakeup.fun/doc/import_from_csv.html")
+    print("===========警告=============")
+    print("本工具仅提供辅助作用，如果生成的课程表与系统中显示的不一致，请时刻以教务系统中显示的为准！")
+    print("本项目已在 https://github.com/CreamPig233/neu_wisedu2wakeup 开源")
+    print("===========================")
     neucas_qr_login()
     print_welcome()
     termcode = get_termcode()
@@ -140,3 +149,4 @@ if __name__ == "__main__":
     schedule_list = get_schedule(campuscode, termcode)
     list_for_csv = convert_arranged(schedule_list)
     print(list_for_csv)
+    input("课程表已保存至schedule.csv，按回车键退出程序。")
