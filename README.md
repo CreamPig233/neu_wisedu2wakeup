@@ -16,9 +16,10 @@
 
 (右侧 Release 可以下载预编译版本)
 
-1. 打开程序，使用绑定了东北大学微信企业号的微信扫描程序显示的二维码
-2. 扫描二维码，在微信点击授权登录后，在程序中按下回车键，等待运行结束
-3. 在程序同目录找到schedule.csv，使用WakeUP课程表导入该文件。[如何导入？](https://wakeup.fun/doc/import_from_csv.html)
+1. 连接校园网 或 OpenVPN
+2. 打开程序，使用绑定了东北大学微信企业号的微信扫描程序显示的二维码
+3. 扫描二维码，在微信点击授权登录后，在程序中按下回车键，等待运行结束
+4. 在程序同目录找到schedule.csv，使用WakeUP课程表导入该文件。[如何导入？](https://wakeup.fun/doc/import_from_csv.html)
 
 ### JS 脚本
 
