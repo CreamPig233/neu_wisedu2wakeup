@@ -5,6 +5,7 @@ from requests.packages import urllib3
 import random
 import qrcode
 import re
+import prettytable
 
 urllib3.disable_warnings()
 
@@ -42,7 +43,7 @@ def neucas_qr_login():
 
 
 
-def convert_arranged_by_WoDeKeBiao(campuscode, term):
+def convert_arranged_by_WoDeKeBiao(term):
 
     headers = {
         'Host': 'jwxt.neu.edu.cn',
@@ -50,10 +51,12 @@ def convert_arranged_by_WoDeKeBiao(campuscode, term):
         "user-agent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
         "content-type": 'application/x-www-form-urlencoded;charset=UTF-8',
     }
-
+    
+    # 获取南湖校区课表
+    
     data = {
         'termCode': term,
-        'campusCode': campuscode,
+        'campusCode': '00',
         'type': 'term',
     }
 
@@ -101,6 +104,52 @@ def convert_arranged_by_WoDeKeBiao(campuscode, term):
             append_list.append(week.replace(",","、").replace("(","").replace(")",""))
             list_for_csv.append(append_list)
     
+    # 获取浑南校区课表
+    
+    data = {
+        'termCode': term,
+        'campusCode': "01",
+        'type': 'term',
+    }
+
+    response = session.post(
+        'https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/student/getMyScheduleDetail.do',
+        headers=headers,
+        data=data,
+        verify=False,
+    )
+
+    schedule_json = response.json()
+    schedule_list = schedule_json["datas"]
+
+    for each_class in schedule_list["arrangedList"]:
+        courseName = each_class["courseName"]
+        dayOfWeek = each_class["dayOfWeek"]
+        beginSection = each_class["beginSection"]
+        endSection = each_class["endSection"]
+        titleDetail = each_class["titleDetail"]
+        weeksAndTeachers = each_class["weeksAndTeachers"]
+        teachers = weeksAndTeachers.split(r"/")[-1]
+        for i in range(1,len(titleDetail)):
+            i = titleDetail[i]
+            if not i[0:1].isdigit():
+                continue
+            append_list = []
+            week = i.split(" ")[0]
+            placeName = i.split(" ")[-1].replace("*","")
+            if placeName.endswith("校区"):
+                placeName = "暂未安排教室"
+
+            append_list.append(courseName)
+            append_list.append(dayOfWeek)
+            append_list.append(beginSection)
+            append_list.append(endSection)
+            append_list.append(re.sub(r'\[.*?\]', '', teachers))
+            append_list.append(placeName)
+            append_list.append(week.replace(",","、").replace("(","").replace(")",""))
+            list_for_csv.append(append_list)
+
+    
     with open("schedule.csv", "a") as f:
         writer = csv.writer(f)
         writer.writerows(list_for_csv)
@@ -124,8 +173,7 @@ def convert_arranged_by_WoDeKeCheng(term):
         headers=headers,
         verify=False,
     )
-    # print(response.text)
-    # print(response.content.decode('utf-8'))
+
 
     schedule_json = response.json()
     schedule_list = schedule_json["datas"]
@@ -198,12 +246,13 @@ def get_termcode():
         
     return termcode
 
-def get_campuscode(termcode):
-    global session
-    resp = session.get(f"https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/student/getMyScheduledCampus.do?termCode={termcode}")
-    campuscode = resp.json()["datas"][0]["id"]
-    return campuscode
-    
+def prettytable_print(list_for_csv):
+    table = prettytable.PrettyTable()
+    table.field_names = ["课程名称", "星期", "开始节数", "结束节数", "老师", "地点", "周数"]
+    for row in list_for_csv:
+        table.add_row(row)
+    print(table)
+
 def print_welcome():   
     global session
     response = session.get("https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/currentUser.do")
@@ -224,26 +273,28 @@ if __name__ == "__main__":
     print("===========================")
     try:
         check_network()
+        input("请仔细阅读上述须知后，按回车键继续...")
         neucas_qr_login()
         print_welcome()
         termcode = get_termcode()
-        campuscode = get_campuscode(termcode)
         print(f"获取{termcode}课程表中...")
         try:
-            list_for_csv = convert_arranged_by_WoDeKeBiao(campuscode, termcode)
+            list_for_csv = convert_arranged_by_WoDeKeCheng(termcode)
         except Exception as e:
-            print("使用“我的课表”模块获取课程表失败")
+            print("使用“我的课程”模块获取课程表失败")
             print("错误信息：", str(e))
-            print("尝试使用“我的课程”模块获取课程表...")
+            print("尝试使用“我的课表”模块获取课程表...")
 
             try:
-                list_for_csv = convert_arranged_by_WoDeKeCheng(termcode)
+                list_for_csv = convert_arranged_by_WoDeKeBiao(termcode)
             except Exception as e2:
-                print("使用“我的课程”模块获取课程表失败")
+                print("使用“我的课表”模块获取课程表失败")
                 print("错误信息：", str(e2))
                 input("课程表获取失败，按回车键退出程序...")
                 exit(1)
-        print(list_for_csv)
+        print("以下是获取到的课程表预览：")
+        prettytable_print(list_for_csv)
+        #print(list_for_csv)
         input("课程表已保存至schedule.csv，按回车键退出程序...")
     except Exception as e:
         print("程序运行出现预料之外的异常，错误信息：", str(e))
