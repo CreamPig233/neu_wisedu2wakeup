@@ -8,6 +8,7 @@ import re
 import prettytable
 import json
 import colorama
+import sys
 
 urllib3.disable_warnings()
 colorama.init(autoreset=True)
@@ -22,11 +23,11 @@ def check_network():
         else:
             print(colorama.Fore.RED + "无法访问教务系统，请连接校园网或OpenVPN后重试。")
             input("按回车键退出程序...")
-            exit(1)
+            sys.exit(1)
     except requests.RequestException:
         print(colorama.Fore.RED + "无法访问教务系统，请连接校园网或OpenVPN后重试。")
         input("按回车键退出程序...")
-        exit(1)
+        sys.exit(1)
 
 def neucas_qr_login():
     print("请使用微信扫码登录")
@@ -38,7 +39,7 @@ def neucas_qr_login():
     qr.make(fit=True)
     qr.print_ascii(invert=True)
     print("或使用微信打开链接：", u_qrurl)
-    input("确认登录后请按回车继续...")
+    input("在微信中点击“授权登录”后请按回车继续...")
     global session
     session.get(u_checkurl)
     session.get("https://pass.neu.edu.cn/tpass/login?service=https%3A%2F%2Fjwxt.neu.edu.cn%2Fjwapp%2Fsys%2Fhomeapp%2Findex.do", allow_redirects=False)
@@ -283,21 +284,21 @@ def export_to_aischedule(list_for_csv, termname, campuscode, first_day):
     except json.JSONDecodeError:
         print(colorama.Fore.RED + "数据格式错误，失败。")
         input("按回车键退出程序...")
-        exit(-1)
+        sys.exit(-1)
     
     try:
         info_userid = debug_info["userId"]
         if info_userid == 0:
             print(colorama.Fore.RED + "userId无效，失败。")
             input("按回车键退出程序...")
-            exit(-1)
+            sys.exit(-1)
         info_deviceId = debug_info["deviceId"]
         info_authorization = debug_info["authorization"]
         info_useragent = debug_info["userAgent"]
     except KeyError:
         print(colorama.Fore.RED + "调试数据缺少必要字段，失败。")
         input("按回车键退出程序...")
-        exit(-1)
+        sys.exit(-1)
     
     # 添加课表
     response = requests.post(
@@ -325,13 +326,14 @@ def export_to_aischedule(list_for_csv, termname, campuscode, first_day):
         else:
             print(colorama.Fore.RED + "错误码：" + str(response.json()["code"]) + "，错误原因：" + desc)
         input("按回车键退出程序...")
-        exit(-1)
+        sys.exit(-1)
     ctId = response.json()["data"]
     if ctId == "0":
         print(colorama.Fore.RED +  "课表创建失败，错误原因：" + response.json()["desc"])
         input("按回车键退出程序...")
-        exit(-1)
+        sys.exit(-1)
     
+    print("课表创建成功，课表名称：" + termname)
     #获取课表配置
     response = requests.get(
         url=f"https://i.xiaomixiaoai.com/course-multi-auth/table?ctId={ctId}&sourceName=course-app-miui", 
@@ -345,8 +347,9 @@ def export_to_aischedule(list_for_csv, termname, campuscode, first_day):
         print(colorama.Fore.RED + "获取课表配置失败")
         print(colorama.Fore.RED + "错误码：" + str(response.json()["code"]) + "，错误原因：" + response.json()["desc"])
         input("按回车键退出程序...")
-        exit(-1)
+        sys.exit(-1)
     settingId=response.json()["data"]["setting"]["id"]
+    print("获取课表配置成功")
     
     #修改课表配置
     if campuscode == "00":
@@ -392,8 +395,9 @@ def export_to_aischedule(list_for_csv, termname, campuscode, first_day):
         print(colorama.Fore.RED + "修改课表配置失败")
         print(colorama.Fore.RED + "错误码：" + str(response.json()["code"]) + "，错误原因：" + response.json()["desc"])
         input("按回车键退出程序...")
-        exit(-1)
-        
+        sys.exit(-1)
+    print("课表配置修改成功")
+    
     #添加课程
     url = "https://i.xiaomixiaoai.com/course-multi-auth/courseInfo"
     headers = {
@@ -404,6 +408,31 @@ def export_to_aischedule(list_for_csv, termname, campuscode, first_day):
         "user-agent": info_useragent,
         "authorization": info_authorization
     }
+    
+    def explain_duplicate_lesson(duplicate_lesson):
+        name = duplicate_lesson["name"]
+        position = duplicate_lesson["position"]
+        weeks = duplicate_lesson["weeks"]
+        sections = duplicate_lesson["sections"]
+        day = duplicate_lesson["day"]
+        return f"课程名称：{name}，上课地点：{position}，上课周数：{weeks}，星期：{day}，上课节数：{sections}"
+    
+    lesson_color_style = [
+        "{\"color\":\"#00A6F2\",\"background\":\"#E5F4FF\"}",
+        "{\"color\":\"#FC6B50\",\"background\":\"#FDEBDE\"}",
+        "{\"color\":\"#3CB3C8\",\"background\":\"#DEFBF8\"}",
+        "{\"color\":\"#7D7AEA\",\"background\":\"#EDEDFF\"}",
+        "{\"color\":\"#FF9900\",\"background\":\"#FCEBCD\"}",
+        "{\"color\":\"#EF5B75\",\"background\":\"#FFEFF0\"}",
+        "{\"color\":\"#5B8EFF\",\"background\":\"#EAF1FF\"}",
+        "{\"color\":\"#F067BB\",\"background\":\"#FFEDF8\"}",
+        "{\"color\":\"#29BBAA\",\"background\":\"#E2F8F3\"}",
+        "{\"color\":\"#CBA713\",\"background\":\"#FFF8C8\"}",
+        "{\"color\":\"#B967E3\",\"background\":\"#F9EDFF\"}",
+        "{\"color\":\"#6E8ADA\",\"background\":\"#F3F2FD\"}"
+    ]
+    
+    duplicate_lesson = []
     for row in list_for_csv:
         weeks = row[6].split("、")
         rawweek = ""
@@ -445,7 +474,7 @@ def export_to_aischedule(list_for_csv, termname, campuscode, first_day):
                 "extend": "",
                 "weeks": rawweek,
                 "day": [1,2,3,4,5,6,7][row[1]-1],
-                "style": "{\"color\":\"#00A6F2\",\"background\":\"#E5F4FF\"}",
+                "style": lesson_color_style[abs(hash(row[0]))%12],
                 "sections": ','.join(str(i) for i in range(row[2], row[3] + 1))
             },
             "userId": info_userid,
@@ -453,19 +482,32 @@ def export_to_aischedule(list_for_csv, termname, campuscode, first_day):
             "sourceName": "course-app-miui"
         }
         response = requests.post(url, headers=headers, json=data)
+        
+        #检查重复课程
+        desc = response.json()["desc"]
+        
+        if desc == "course info has overlap":
+            print(colorama.Fore.RED + "添加课程失败，存在重复课程")
+            print(colorama.Fore.RED + "跳过该课程继续导入剩余课程")
+            duplicate_lesson.append(data["course"])
+            continue
+        
         responsecode = response.json()["code"]
         if responsecode != 0:
             print(colorama.Fore.RED + "添加课程失败")
             desc = response.json()["desc"]
-            if desc == "course info has overlap":
-                print(colorama.Fore.RED + "下面的课程存在课程时间冲突")
-            else:
-                print(colorama.Fore.RED + "错误码：" + str(response.json()["code"]) + "，错误原因：" +desc)
-            print("当前课程信息：" + str(data["course"]) )
+            print(colorama.Fore.RED + "错误码：" + str(response.json()["code"]) + "，错误原因：" +desc)
+            print("导入课程信息时出错：" + str(data["course"]) )
             input("按回车键退出程序...")
-            exit(-1)
-    print("如果不出意外，课程表已成功导入")
-    print("请退出小爱课程表并重新进入，点击右上角切换课表，即可看到新导入的课表")
+            sys.exit(-1)
+    
+    if len(duplicate_lesson) > 0:
+        print(colorama.Fore.YELLOW + "以下课程因与其他课程时间冲突，导入失败，请检查：")
+        for lesson in duplicate_lesson:
+            print(colorama.Fore.YELLOW + explain_duplicate_lesson(lesson))
+    else:
+        print(colorama.Fore.GREEN + "如果不出意外，课程表已成功导入")
+    print(colorama.Fore.GREEN + "请退出小爱课程表并重新进入，点击右上角切换课表，即可看到新导入的课表")
     input("按回车键退出程序...")
         
 
@@ -500,7 +542,7 @@ if __name__ == "__main__":
                 print(colorama.Fore.RED + "使用“我的课表”模块获取课程表失败")
                 print(colorama.Fore.RED + "错误信息：" + str(e2))
                 input("课程表获取失败，按回车键退出程序...")
-                exit(1)
+                sys.exit(1)
                 
         while True:
             print("==========获取结束==========")
@@ -517,14 +559,15 @@ if __name__ == "__main__":
                     writer = csv.writer(f)
                     writer.writerow(["课程名称", "星期", "开始节数", "结束节数", "老师", "地点", "周数"])
                     writer.writerows(list_for_csv)
-                print("课程表已成功导出至程序同目录的schedule.csv，请使用WakeUP课程表导入该文件。")
+                print(colorama.Fore.GREEN + "课程表已成功导出至程序同目录的schedule.csv，请使用WakeUP课程表导入该文件。")
                 print("   如何导入? https://wakeup.fun/doc/import_from_csv.html")
                 input("按回车键退出程序...")
-                exit(0)
+                sys.exit(0)
             elif choice == "2":
                 first_day = get_first_day(termcode)
+                #list_for_csv = [['井巷工程', 3, 1, 2, '赵兴东', '大成206', '1-8周'], ['井巷工程', 4, 9, 10, '赵兴东', '大成202', '1-8周'], ['井巷工程', 1, 1, 2, '赵兴东', '大成210', '1-8周'], ['金属矿床地下开采', 4, 7, 8, '李元辉,徐帅,姜海强,安龙,侯朋远,李坤蒙', '大成206', '1-9周、15-17周'], ['金属矿床地下开采', 1, 7, 8, '李元辉,徐帅,姜海强,安龙,侯朋远,李坤蒙', '大成102-智慧教室', '5-9周、11-17周'], ['金属矿床地下开采', 2, 7, 8, '李元辉,徐帅,姜海强,安龙,侯朋远,李坤蒙', '大成104-智慧教室', '5-9周、11-17周'], ['金属矿床地下开采', 3, 5, 8, '李元辉,徐帅,姜海强,安龙,侯朋远,李坤蒙', '实验楼601计算机实 验室（一）', '14周'], ['金属矿床地下开采', 6, 5, 8, '李元辉,徐帅,姜海强,安龙,侯朋远,李坤蒙', '实验楼601计算机实验室（一）', '14周'], ['金属矿床露天开采', 2, 3, 4, '王青,胥孝川,顾晓薇,张鹏海,潘济安', '采416', '1-16周'], ['金属矿床露天开采', 5, 3, 4, '王青,胥孝川,顾晓薇,张鹏海,潘济安', '大成102-智慧教室', '1-4周'], ['金属矿床露天开采', 1, 1, 2, '王青,胥孝川,顾晓薇,张鹏海,潘济安', '采416', '9-16周'], ['金属矿床露天开采', 1, 1, 2, '冲突测试', '实验楼601计算机实验室（一）', '13-14周'], ['非金属矿床开发', 1, 5, 6, '韩智勇', '大成408', '1-8周'], ['非金属矿床开发', 3, 3, 4, '韩智勇', '大成404', '5-8周'], ['井巷工程课程设计', 1, 9, 12, '赵兴东', '实验楼603计算机实验室（二）', '11-12周'], ['井巷工程课程设计', 3, 5, 8, '赵兴东', '实验楼605计算机实验室（三）', '15-16周'], ['人工智能基础', 1, 9, 12, '叶柠', '逸101', '1-4周、6-8周'], ['人工智能基础', 1, 9, 12, '叶柠', '机206', '5周'], ['形势与政策(3)', 5, 7, 8, '王宽,何彦彦', '大成205', '7-8周']]
                 export_to_aischedule(list_for_csv, termname, campuscode, first_day)
-                exit(0)
+                sys.exit(0)
             else:
                 print("无效的选择。")
                 input("按回车键重试...")
@@ -534,4 +577,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(colorama.Fore.RED + "程序运行出现预料之外的异常，错误信息：" + str(e))
         input("按回车键退出程序...")
-        exit(1)
+        sys.exit(1)
