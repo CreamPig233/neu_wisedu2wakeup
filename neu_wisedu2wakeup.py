@@ -9,6 +9,7 @@ import prettytable
 import json
 import colorama
 import sys
+import base64
 
 urllib3.disable_warnings()
 colorama.init(autoreset=True)
@@ -21,16 +22,18 @@ def check_network():
         if response.status_code == 200:
             return
         else:
-            print(colorama.Fore.RED + "无法访问教务系统，请连接校园网或OpenVPN后重试。")
+            print(colorama.Fore.RED + "无法访问教务系统，但这可能不是你的问题。请稍等片刻后重新打开本程序。")
+            print(colorama.Fore.LIGHTBLACK_EX + f"访问状态码：{response.status_code}" + colorama.Style.RESET_ALL)
             input("按回车键退出程序...")
             sys.exit(1)
-    except requests.RequestException:
-        print(colorama.Fore.RED + "无法访问教务系统，请连接校园网或OpenVPN后重试。")
+    except requests.RequestException as e:
+        print(colorama.Fore.RED + "无法访问教务系统，请连接校园网或OpenVPN后重新打开本程序。")
+        print(colorama.Fore.LIGHTBLACK_EX + f"报错信息：{str(e)}" + colorama.Style.RESET_ALL)
         input("按回车键退出程序...")
         sys.exit(1)
 
 def neucas_qr_login():
-    print("请使用微信扫码登录")
+    print(colorama.Fore.YELLOW + "\n请使用微信扫码登录")
     u_uuid = str(uuid.uuid4())
     u_qrurl = f"https://pass.neu.edu.cn/tpass/qyQrLogin?uuid={u_uuid}"
     u_checkurl = f"https://pass.neu.edu.cn/tpass/checkQRCodeScan?random={random.random():.16f}&uuid={u_uuid}"
@@ -38,7 +41,7 @@ def neucas_qr_login():
     qr.add_data(u_qrurl)
     qr.make(fit=True)
     qr.print_ascii(invert=True)
-    print("或使用微信打开链接：", u_qrurl)
+    print(colorama.Fore.LIGHTBLACK_EX + "无法扫码？使用微信打开链接：", u_qrurl)
     input("在微信中点击“授权登录”后请按回车继续...")
     global session
     session.get(u_checkurl)
@@ -51,7 +54,7 @@ def print_welcome():
     response_json = response.json()
     username = response_json["datas"]["userName"]
     userid = response_json["datas"]["userId"]
-    print(f"欢迎您，{username} ({userid})！")
+    print(f"\n欢迎您，{username} ({userid})！")
     return username
 
 def get_termcode():
@@ -271,9 +274,9 @@ def get_first_day(termcode):
 def export_to_aischedule(list_for_csv, termname, campuscode, first_day):
     print(colorama.Fore.YELLOW + "===========警告=============")
     print(colorama.Fore.YELLOW + "导出到小爱课程表属于实验性功能，可能存在导入失败等情况，请谨慎使用！")
-    print(colorama.Fore.YELLOW + "当前仅支持MIUI/HyperOS系统中自带的小爱课程表，独立版本及网页版暂不支持导入。")
+    print(colorama.Fore.YELLOW + "当前支持MIUI/HyperOS系统中自带的小爱课程表 与 小爱课程表独立版app")
     print("请仔细阅读下述操作方法，")
-    print("1. 打开小爱课程表，点击右下角头像按钮进入课程表设置")
+    print("1. 打开小爱课程表，(独立版需要登录)，点击右下角头像按钮进入课程表设置")
     print("2. 将页面滑到最下面，点击“开始新学期”下方空白处5次，进入Debug页面")
     print("3. 点击“点击获取UserInfo”，在弹窗中点击复制")
     print("4. 将复制得到的调试数据输入到下方")
@@ -286,34 +289,64 @@ def export_to_aischedule(list_for_csv, termname, campuscode, first_day):
         input("按回车键退出程序...")
         sys.exit(-1)
     
+    source_miui = False
+    source_app = False
+    
     try:
         info_userid = debug_info["userId"]
         if info_userid == 0:
-            print(colorama.Fore.RED + "userId无效，失败。")
+            print(colorama.Fore.RED + "userId无效，失败，请检查是否登录。")
             input("按回车键退出程序...")
             sys.exit(-1)
         info_deviceId = debug_info["deviceId"]
         info_authorization = debug_info["authorization"]
         info_useragent = debug_info["userAgent"]
+        urlroot = "https://i.xiaomixiaoai.com"
+        source_miui = True
+        sourceName = "course-app-miui"
+        print(colorama.Fore.LIGHTBLACK_EX + "检测来源为系统自带小爱课程表")
     except KeyError:
-        print(colorama.Fore.RED + "调试数据缺少必要字段，失败。")
-        input("按回车键退出程序...")
-        sys.exit(-1)
+        try:
+            appId = debug_info["appId"]
+            serviceToken = debug_info["serviceToken"]
+            if serviceToken == "":
+                print(colorama.Fore.RED + "serviceToken无效，失败，请检查是否登录。")
+                input("按回车键退出程序...")
+                sys.exit(-1)
+            scope_data = base64.b64encode(json.dumps({"d": debug_info["deviceId"]}).encode("utf-8")).decode("ascii")
+
+            info_authorization = f"AO-TOKEN-V1 dev_app_id:{appId},scope_data:{scope_data},access_token:{serviceToken}"
+            urlroot = "https://i.ai.mi.com"
+            source_app = True
+            sourceName = "course-app-aiSchedule"
+            print(colorama.Fore.LIGHTBLACK_EX + "检测来源为小爱课程表独立版app")
+        except KeyError:
+            print(colorama.Fore.RED + "数据缺失，失败。")
+            input("按回车键退出程序...")
+            sys.exit(-1)
     
     # 添加课表
-    response = requests.post(
-        url="https://i.xiaomixiaoai.com/course-multi-auth/table", 
+    if source_miui:
         headers = {
             "accept": "application/json",
             "content-type": "application/json",
             "access-control-allow-origin": "true",
             "user-agent": info_useragent,
             "authorization": info_authorization
-        },
+        }
+    if source_app:
+        headers = {
+            "content-type": "application/json",
+            "access-control-allow-origin": "true",
+            "authorization": info_authorization
+        }
+    response = requests.post(
+        url=urlroot + "/course-multi-auth/table", 
+        headers = headers,
         json={
             "name": termname,
             "current": 0,
-            "sourceName": "course-app-miui"
+            "sourceName": sourceName
         })
     responsecode = response.json()["code"]
     if responsecode != 0:
@@ -334,14 +367,24 @@ def export_to_aischedule(list_for_csv, termname, campuscode, first_day):
         sys.exit(-1)
     
     print("课表创建成功，课表名称：" + termname)
+    
+    
     #获取课表配置
-    response = requests.get(
-        url=f"https://i.xiaomixiaoai.com/course-multi-auth/table?ctId={ctId}&sourceName=course-app-miui", 
-        headers =  {
+    if source_miui:
+        headers = {
             "content-type": "application/json",
             "user-agent": info_useragent,
             "authorization": info_authorization
-        })
+        }
+    if source_app:
+        headers = {
+            "content-type": "application/json",
+            "access-control-allow-origin": "true",
+            "authorization": info_authorization
+        }
+    response = requests.get(
+        url=f"{urlroot}/course-multi-auth/table?ctId={ctId}&sourceName={sourceName}", 
+        headers = headers)
     responsecode = response.json()["code"]
     if responsecode != 0:
         print(colorama.Fore.RED + "获取课表配置失败")
@@ -359,21 +402,31 @@ def export_to_aischedule(list_for_csv, termname, campuscode, first_day):
         #浑南校区时间表
         sections = r'[{"i":1,"s":"08:30","e":"09:15"},{"i":2,"s":"09:25","e":"10:10"},{"i":3,"s":"10:30","e":"11:15"},{"i":4,"s":"11:25","e":"12:10"},{"i":5,"s":"14:00","e":"14:45"},{"i":6,"s":"14:55","e":"15:40"},{"i":7,"s":"16:10","e":"16:55"},{"i":8,"s":"17:05","e":"17:50"},{"i":9,"s":"18:30","e":"19:15"},{"i":10,"s":"19:25","e":"20:10"},{"i":11,"s":"20:20","e":"21:05"},{"i":12,"s":"21:15","e":"22:00"}]'
     
-    response = requests.put(
-        url="https://i.xiaomixiaoai.com/course-multi-auth/table", 
-        headers={
+    if source_miui:
+        headers = {
             "accept": "application/json",
             "content-type": "application/json",
             "origin": "https://i.xiaomixiaoai.com",
             "referer": "https://i.xiaomixiaoai.com/h5/precache/ai-schedule/",
             "user-agent": info_useragent,
             "authorization": info_authorization
-        }, 
+        }
+    if source_app:
+        headers = {
+            "accept": "application/json",
+            "content-type": "application/json",
+            "access-control-allow-origin": "true",
+            "authorization": info_authorization
+        }
+    
+    response = requests.put(
+        url=f"{urlroot}/course-multi-auth/table", 
+        headers=headers, 
         json={
             "ctId": ctId,
             "deviceId": info_deviceId,
             "name":termname,
-            "sourceName": "course-app-miui",
+            "sourceName": sourceName,
             "userId": info_userid,
             "setting": {
                 "afternoonNum":4,
@@ -399,15 +452,24 @@ def export_to_aischedule(list_for_csv, termname, campuscode, first_day):
     print("课表配置修改成功")
     
     #添加课程
-    url = "https://i.xiaomixiaoai.com/course-multi-auth/courseInfo"
-    headers = {
-        "accept": "application/json",
-        "content-type": "application/json",
-        "origin": "https://i.xiaomixiaoai.com",
-        "referer": "https://i.xiaomixiaoai.com/h5/precache/ai-schedule/",
-        "user-agent": info_useragent,
-        "authorization": info_authorization
-    }
+    print("正在添加课程...")
+    if source_miui:
+        headers = {
+            "accept": "application/json",
+            "content-type": "application/json",
+            "origin": "https://i.xiaomixiaoai.com",
+            "referer": "https://i.xiaomixiaoai.com/h5/precache/ai-schedule/",
+            "user-agent": info_useragent,
+            "authorization": info_authorization
+        }
+    if source_app:
+        headers = {
+            "accept": "application/json",
+            "content-type": "application/json",
+            "access-control-allow-origin": "true",
+            "authorization": info_authorization
+        }
+    url = f"{urlroot}/course-multi-auth/courseInfo?sourceName={sourceName}"
     
     def explain_duplicate_lesson(duplicate_lesson):
         name = duplicate_lesson["name"]
@@ -508,21 +570,22 @@ def export_to_aischedule(list_for_csv, termname, campuscode, first_day):
     else:
         print(colorama.Fore.GREEN + "如果不出意外，课程表已成功导入")
     print(colorama.Fore.GREEN + "请退出小爱课程表并重新进入，点击右上角切换课表，即可看到新导入的课表")
+    print(colorama.Fore.YELLOW + "提示：导入后请与教务系统中的课程表进行比对。如存在区别，请以教务系统显示为准！" + colorama.Style.RESET_ALL)
     input("按回车键退出程序...")
         
 
     
 if __name__ == "__main__":
-    print("==========使用教程==========")
-    print("1.打开程序，使用绑定了东北大学微信企业号的微信扫描程序显示的二维码")
-    print("2.扫描二维码，在微信点击授权登录后，在程序中按下回车键，等待运行结束")
-    print("3.根据提示选择导出方式，导出课程表")
-    print(colorama.Fore.YELLOW + "===========警告=============")
-    print(colorama.Fore.YELLOW + "本工具仅提供辅助作用，如果生成的课程表与系统中显示的不一致，请时刻以教务系统中显示的为准！")
-    print("本项目已在 https://github.com/CreamPig233/neu_wisedu2wakeup 开源")
-    print("===========================")
     try:
         check_network()
+        print("==========使用教程==========")
+        print("1.打开程序，使用绑定了东北大学微信企业号的微信扫描程序显示的二维码")
+        print("2.扫描二维码，在微信点击授权登录后，在程序中按下回车键，等待运行结束")
+        print("3.根据提示选择导出方式，导出课程表")
+        print(colorama.Fore.YELLOW + "===========警告=============")
+        print(colorama.Fore.YELLOW + "本工具仅提供辅助作用，如果生成的课程表与系统中显示的不一致，请时刻以教务系统中显示的为准！")
+        print("本项目已在 https://github.com/CreamPig233/neu_wisedu2wakeup 开源")
+        print("===========================")
         input("请仔细阅读上述须知后，按回车键继续...")
         neucas_qr_login()
         username = print_welcome()
@@ -561,6 +624,7 @@ if __name__ == "__main__":
                     writer.writerows(list_for_csv)
                 print(colorama.Fore.GREEN + "课程表已成功导出至程序同目录的schedule.csv，请使用WakeUP课程表导入该文件。")
                 print("   如何导入? https://wakeup.fun/doc/import_from_csv.html")
+                print(colorama.Fore.YELLOW + "提示：导入后请与教务系统中的课程表进行比对。如存在区别，请以教务系统显示为准！" + colorama.Style.RESET_ALL)
                 input("按回车键退出程序...")
                 sys.exit(0)
             elif choice == "2":
