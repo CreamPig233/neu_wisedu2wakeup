@@ -10,27 +10,83 @@ import json
 import colorama
 import sys
 import base64
+from Crypto.Cipher import AES
+import traceback
 
 urllib3.disable_warnings()
 colorama.init(autoreset=True)
 
 session = requests.Session()
+session.headers.update({"user-agent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'})
+using_webvpn = False
 
 def check_network():
+    print("正在检查网络连接，请稍等...")
     try:
-        response = session.get("http://jwxt.neu.edu.cn", timeout=5)
+        response = session.get("http://jwxt.neu.edu.cn", timeout=3)
         if response.status_code == 200:
+            print(colorama.Fore.LIGHTBLACK_EX + "内网访问")
             return
         else:
-            print(colorama.Fore.RED + "无法访问教务系统，但这可能不是你的问题。请稍等片刻后重新打开本程序。")
-            print(colorama.Fore.LIGHTBLACK_EX + f"访问状态码：{response.status_code}" + colorama.Style.RESET_ALL)
+            print(colorama.Fore.RED + "无法访问教务系统, 但这可能不是你的问题. 请稍等片刻后重新打开本程序.")
+            print(colorama.Fore.LIGHTBLACK_EX + f"访问状态码: {response.status_code}" + colorama.Style.RESET_ALL)
             input("按回车键退出程序...")
             sys.exit(1)
     except requests.RequestException as e:
-        print(colorama.Fore.RED + "无法访问教务系统，请连接校园网或OpenVPN后重新打开本程序。")
-        print(colorama.Fore.LIGHTBLACK_EX + f"报错信息：{str(e)}" + colorama.Style.RESET_ALL)
+        print(colorama.Fore.LIGHTBLACK_EX + "WebVPN访问")
+        try:
+            response = session.get("https://webvpn.neu.edu.cn", timeout=3)
+            if response.status_code == 200:
+                global using_webvpn
+                using_webvpn = True
+                return
+            else:
+                print(colorama.Fore.RED + "无法访问WebVPN, 但这可能不是你的问题. 请稍等片刻后重新打开本程序.")
+                print(colorama.Fore.LIGHTBLACK_EX + f"访问状态码: {response.status_code}" + colorama.Style.RESET_ALL)
+                input("按回车键退出程序...")
+                sys.exit(1)
+        except requests.RequestException as e:
+            print(colorama.Fore.RED + "无法访问WebVPN, 请检查你的网络链接后重试.")
+            print(colorama.Fore.LIGHTBLACK_EX + f"错误信息：\n" + traceback.format_exc())
+            input("按回车键退出程序...")
+            sys.exit(1)
+        except Exception as e:
+            print(colorama.Fore.RED + "无法访问WebVPN, 发生未知错误, 请稍后重试.")
+            print(colorama.Fore.LIGHTBLACK_EX + f"错误信息：\n" + traceback.format_exc())
+            input("按回车键退出程序...")
+            sys.exit(1)
+    except Exception as e:
+        print(colorama.Fore.RED + "无法访问教务系统, 发生未知错误, 请稍后重试.")
+        print(colorama.Fore.LIGHTBLACK_EX + f"错误信息：\n" + traceback.format_exc())
         input("按回车键退出程序...")
         sys.exit(1)
+
+def set_webvpn(url):
+    if not using_webvpn:
+        return url
+    else:
+        protocol, url = url.split("://")
+        urlroot, urlpath = url.split("/", 1)
+        
+        if "qyQrLogin" in urlpath:
+            urlpath = urlpath + "&service=https://webvpn.neu.edu.cn/login?cas_login=true"
+            return protocol + "://" + urlroot + "/" + urlpath
+        if "checkQRCodeScan" in urlpath:
+            prepath, postpath = urlpath.split("?", 1)
+            urlpath = prepath + "?vpn-12-o2-pass.neu.edu.cn&" + postpath
+            url = "https://webvpn.neu.edu.cn/https/62304135386136393339346365373340a0e0b72cc4cb43c8bc1d6f66c806db"+ "/" + urlpath
+            return url
+        
+        cipher = AES.new(
+            b'b0A58a69394ce73@',
+            AES.MODE_CFB,
+            b'b0A58a69394ce73@',
+            segment_size=128)
+        cipher_text = cipher.encrypt(urlroot.ljust(len(urlroot)//16*16+16, '\0').encode())
+
+        res = f'https://webvpn.neu.edu.cn/{protocol}/62304135386136393339346365373340' \
+            + cipher_text[:len(urlroot)].hex() + "/" + urlpath
+        return res
 
 def neucas_qr_login():
     print(colorama.Fore.YELLOW + "\n请使用微信扫码登录")
@@ -38,19 +94,27 @@ def neucas_qr_login():
     u_qrurl = f"https://pass.neu.edu.cn/tpass/qyQrLogin?uuid={u_uuid}"
     u_checkurl = f"https://pass.neu.edu.cn/tpass/checkQRCodeScan?random={random.random():.16f}&uuid={u_uuid}"
     qr = qrcode.QRCode()
-    qr.add_data(u_qrurl)
+    qr.add_data(set_webvpn(u_qrurl))
     qr.make(fit=True)
     qr.print_ascii(invert=True)
-    print(colorama.Fore.LIGHTBLACK_EX + "无法扫码？使用微信打开链接：", u_qrurl)
+    print(colorama.Fore.LIGHTBLACK_EX + "无法扫码？使用微信打开链接：" + set_webvpn(u_qrurl))
     input("在微信中点击“授权登录”后请按回车继续...")
-    global session
-    session.get(u_checkurl)
-    session.get("https://pass.neu.edu.cn/tpass/login?service=https%3A%2F%2Fjwxt.neu.edu.cn%2Fjwapp%2Fsys%2Fhomeapp%2Findex.do", allow_redirects=False)
-    session.get("https://pass.neu.edu.cn/tpass/login?service=https%3A%2F%2Fjwxt.neu.edu.cn%2Fjwapp%2Fsys%2Fhomeapp%2Findex.do%3FcontextPath%3D%2Fjwapp")
+    global session, using_webvpn
+    if not using_webvpn:
+        session.get(u_checkurl)
+        session.get("https://pass.neu.edu.cn/tpass/login?service=https%3A%2F%2Fjwxt.neu.edu.cn%2Fjwapp%2Fsys%2Fhomeapp%2Findex.do", allow_redirects=False)
+        session.get("https://pass.neu.edu.cn/tpass/login?service=https%3A%2F%2Fjwxt.neu.edu.cn%2Fjwapp%2Fsys%2Fhomeapp%2Findex.do%3FcontextPath%3D%2Fjwapp")
+    else:
+        session.get("https://webvpn.neu.edu.cn")
+        session.headers.update({
+            "referer": "https://webvpn.neu.edu.cn/https/62304135386136393339346365373340a0e0b72cc4cb43c8bc1d6f66c806db/tpass/login?service=https%3A%2F%2Fwebvpn.neu.edu.cn%2Flogin%3Fcas_login%3Dtrue",
+        })
+        session.get(set_webvpn(u_checkurl))
+        session.get("https://webvpn.neu.edu.cn/http/62304135386136393339346365373340baf6bc2bc4cb43c8bc1d6f66c806db/jwapp/sys/homeapp/index.do")
 
 def print_welcome():   
     global session
-    response = session.get("https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/currentUser.do")
+    response = session.get(set_webvpn("https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/currentUser.do"))
     response_json = response.json()
     username = response_json["datas"]["userName"]
     userid = response_json["datas"]["userId"]
@@ -59,12 +123,12 @@ def print_welcome():
 
 def get_termcode():
     global session
-    response = session.get("https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/currentUser.do")
+    response = session.get(set_webvpn("https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/currentUser.do"))
     response_json = response.json()
     termcode = response_json["datas"]["welcomeInfo"]["xnxqdm"]
     termname = response_json["datas"]["welcomeInfo"]["xnxqmc"]
-    print("当前学期为：", termcode,"，", termname)
-    inputtermcode = input("如需更改学期请输入学期代码（格式如2025-2026-1），否则直接回车：")
+    print(f"当前学期为：{termname} ({termcode}) ")
+    inputtermcode = input("如需更改学期请输入学期代码 (格式如2025-2026-1), 否则直接回车：")
     if inputtermcode != "":
         codes = inputtermcode.split("-")
         if len(codes) != 3:
@@ -80,7 +144,7 @@ def get_termcode():
 
 def get_campuscode(termcode):
     global session
-    resp = session.get(f"https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/student/getMyScheduledCampus.do?termCode={termcode}")
+    resp = session.get(set_webvpn(f"https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/student/getMyScheduledCampus.do?termCode={termcode}"))
     campuscode = resp.json()["datas"][0]["id"]
     return campuscode
 
@@ -88,8 +152,8 @@ def get_campuscode(termcode):
 def convert_arranged_by_WoDeKeBiao(term):
 
     headers = {
-        'Host': 'jwxt.neu.edu.cn',
-        "Referer": 'https://jwxt.neu.edu.cn/jwapp/sys/homeapp/home/index.html?av=&contextPath=/jwapp',
+        "origin": "https://webvpn.neu.edu.cn" if using_webvpn else "https://jwxt.neu.edu.cn",
+        "Referer": set_webvpn('https://jwxt.neu.edu.cn/jwapp/sys/homeapp/home/index.html?av=&contextPath=/jwapp'),
         "user-agent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
         "content-type": 'application/x-www-form-urlencoded;charset=UTF-8',
     }
@@ -104,7 +168,7 @@ def convert_arranged_by_WoDeKeBiao(term):
 
     global session
     response = session.post(
-        'https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/student/getMyScheduleDetail.do',
+        set_webvpn('https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/student/getMyScheduleDetail.do'),
         headers=headers,
         data=data,
         verify=False,
@@ -152,7 +216,7 @@ def convert_arranged_by_WoDeKeBiao(term):
     }
 
     response = session.post(
-        'https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/student/getMyScheduleDetail.do',
+        set_webvpn('https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/student/getMyScheduleDetail.do'),
         headers=headers,
         data=data,
         verify=False,
@@ -197,8 +261,8 @@ def convert_arranged_by_WoDeKeBiao(term):
 def convert_arranged_by_WoDeKeCheng(term):
 
     headers = {
-        'Host': 'jwxt.neu.edu.cn',
-        "Referer": 'https://jwxt.neu.edu.cn/jwapp/sys/homeapp/home/index.html?av=&contextPath=/jwapp',
+        "origin": "https://webvpn.neu.edu.cn" if using_webvpn else "https://jwxt.neu.edu.cn",
+        "Referer": set_webvpn('https://jwxt.neu.edu.cn/jwapp/sys/homeapp/home/index.html?av=&contextPath=/jwapp'),
         "user-agent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
         "content-type": 'application/x-www-form-urlencoded;charset=UTF-8',
     }
@@ -206,7 +270,7 @@ def convert_arranged_by_WoDeKeCheng(term):
 
     global session
     response = session.get(
-        f'https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/student/courses.do?termCode={term}',
+        set_webvpn(f'https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/student/courses.do?termCode={term}'),
         headers=headers,
         verify=False,
     )
@@ -265,7 +329,7 @@ def prettytable_print(list_for_csv):
 def get_first_day(termcode):
     from datetime import datetime
     global session
-    resp = session.get(f"https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/getTermWeeks.do?termCode={termcode}")
+    resp = session.get(set_webvpn(f"https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/getTermWeeks.do?termCode={termcode}"))
     first_day = resp.json()["datas"][0]["startDate"]
     first_day = datetime.strptime(first_day, "%Y-%m-%d %H:%M:%S")
     first_day = int(first_day.timestamp())*1000
@@ -541,7 +605,7 @@ def export_to_aischedule(list_for_csv, termname, campuscode, first_day):
             },
             "userId": info_userid,
             "deviceId": info_deviceId,
-            "sourceName": "course-app-miui"
+            "sourceName": sourceName
         }
         response = requests.post(url, headers=headers, json=data)
         
@@ -577,21 +641,24 @@ def export_to_aischedule(list_for_csv, termname, campuscode, first_day):
     
 if __name__ == "__main__":
     try:
+        
         check_network()
         print("==========使用教程==========")
-        print("1.打开程序，使用绑定了东北大学微信企业号的微信扫描程序显示的二维码")
-        print("2.扫描二维码，在微信点击授权登录后，在程序中按下回车键，等待运行结束")
-        print("3.根据提示选择导出方式，导出课程表")
+        print("1.打开程序，仔细阅读并理解本使用教程，而后按回车键继续")
+        print("2.使用绑定了东北大学微信企业号的微信扫描程序显示的二维码 (或使用微信打开给出的链接)")
+        print("3.扫描二维码，在微信点击授权登录后，在程序中按下回车键，等待运行结束")
+        print("4.根据提示选择导出方式，导出课程表")
         print(colorama.Fore.YELLOW + "===========警告=============")
         print(colorama.Fore.YELLOW + "本工具仅提供辅助作用，如果生成的课程表与系统中显示的不一致，请时刻以教务系统中显示的为准！")
-        print("本项目已在 https://github.com/CreamPig233/neu_wisedu2wakeup 开源")
+        print(colorama.Fore.YELLOW + "本项目已在 https://github.com/CreamPig233/neu_wisedu2wakeup 开源")
+        print(colorama.Fore.YELLOW + "请尽量从上方网址处下载最新程序，以免出现问题。")
         print("===========================")
-        input("请仔细阅读上述须知后，按回车键继续...")
+        input("请仔细阅读上述内容后，按回车键继续...")
         neucas_qr_login()
         username = print_welcome()
         termcode, termname = get_termcode()
         campuscode = get_campuscode(termcode)
-        print(f"获取{termcode}课程表中...")
+        print(f"获取{termname} ({termcode}) 课程表中...")
         try:
             list_for_csv = convert_arranged_by_WoDeKeCheng(termcode)
         except Exception as e:
@@ -614,9 +681,9 @@ if __name__ == "__main__":
             prettytable_print(list_for_csv)
 
             print("导出方式：")
-            print("1. 导出至csv文件（导出至WakeUP课程表）")
-            print("2. 导出至小爱课程表"+colorama.Fore.YELLOW+"（！实验性功能！）"+colorama.Style.RESET_ALL)
-            choice = input("请选择导出方式：（输入数字1或数字2）：")
+            print("1. 导出至csv文件 (导出至WakeUP课程表)")
+            print("2. 导出至小爱课程表"+colorama.Fore.YELLOW+" (!实验性功能!) "+colorama.Style.RESET_ALL)
+            choice = input("请选择导出方式(输入数字1或2): ")
             if choice == "1":
                 with open("schedule.csv", "w", newline='', encoding='utf-8-sig') as f:
                     writer = csv.writer(f)
@@ -629,7 +696,6 @@ if __name__ == "__main__":
                 sys.exit(0)
             elif choice == "2":
                 first_day = get_first_day(termcode)
-                #list_for_csv = [['井巷工程', 3, 1, 2, '赵兴东', '大成206', '1-8周'], ['井巷工程', 4, 9, 10, '赵兴东', '大成202', '1-8周'], ['井巷工程', 1, 1, 2, '赵兴东', '大成210', '1-8周'], ['金属矿床地下开采', 4, 7, 8, '李元辉,徐帅,姜海强,安龙,侯朋远,李坤蒙', '大成206', '1-9周、15-17周'], ['金属矿床地下开采', 1, 7, 8, '李元辉,徐帅,姜海强,安龙,侯朋远,李坤蒙', '大成102-智慧教室', '5-9周、11-17周'], ['金属矿床地下开采', 2, 7, 8, '李元辉,徐帅,姜海强,安龙,侯朋远,李坤蒙', '大成104-智慧教室', '5-9周、11-17周'], ['金属矿床地下开采', 3, 5, 8, '李元辉,徐帅,姜海强,安龙,侯朋远,李坤蒙', '实验楼601计算机实 验室（一）', '14周'], ['金属矿床地下开采', 6, 5, 8, '李元辉,徐帅,姜海强,安龙,侯朋远,李坤蒙', '实验楼601计算机实验室（一）', '14周'], ['金属矿床露天开采', 2, 3, 4, '王青,胥孝川,顾晓薇,张鹏海,潘济安', '采416', '1-16周'], ['金属矿床露天开采', 5, 3, 4, '王青,胥孝川,顾晓薇,张鹏海,潘济安', '大成102-智慧教室', '1-4周'], ['金属矿床露天开采', 1, 1, 2, '王青,胥孝川,顾晓薇,张鹏海,潘济安', '采416', '9-16周'], ['金属矿床露天开采', 1, 1, 2, '冲突测试', '实验楼601计算机实验室（一）', '13-14周'], ['非金属矿床开发', 1, 5, 6, '韩智勇', '大成408', '1-8周'], ['非金属矿床开发', 3, 3, 4, '韩智勇', '大成404', '5-8周'], ['井巷工程课程设计', 1, 9, 12, '赵兴东', '实验楼603计算机实验室（二）', '11-12周'], ['井巷工程课程设计', 3, 5, 8, '赵兴东', '实验楼605计算机实验室（三）', '15-16周'], ['人工智能基础', 1, 9, 12, '叶柠', '逸101', '1-4周、6-8周'], ['人工智能基础', 1, 9, 12, '叶柠', '机206', '5周'], ['形势与政策(3)', 5, 7, 8, '王宽,何彦彦', '大成205', '7-8周']]
                 export_to_aischedule(list_for_csv, termname, campuscode, first_day)
                 sys.exit(0)
             else:
@@ -639,6 +705,6 @@ if __name__ == "__main__":
 
         
     except Exception as e:
-        print(colorama.Fore.RED + "程序运行出现预料之外的异常，错误信息：" + str(e))
+        print(colorama.Fore.RED + "程序运行出现预料之外的异常，错误信息：\n" + traceback.format_exc())
         input("按回车键退出程序...")
         sys.exit(1)

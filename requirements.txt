@@ -1,3 +1,4 @@
 requests>=2.32.4
 qrcode>=8.2
 prettytable>=3.16.0
+pycryptodome>=3.23.0
