@@ -102,8 +102,8 @@ def neucas_qr_login():
     global session, using_webvpn
     if not using_webvpn:
         session.get(u_checkurl)
-        session.get("https://pass.neu.edu.cn/tpass/login?service=https%3A%2F%2Fjwxt.neu.edu.cn%2Fjwapp%2Fsys%2Fhomeapp%2Findex.do", allow_redirects=False)
-        session.get("https://pass.neu.edu.cn/tpass/login?service=https%3A%2F%2Fjwxt.neu.edu.cn%2Fjwapp%2Fsys%2Fhomeapp%2Findex.do%3FcontextPath%3D%2Fjwapp")
+        session.get("https://pass.neu.edu.cn/tpass/login?service=http%3A%2F%2Fjwxt.neu.edu.cn%2Fjwapp%2Fsys%2Fhomeapp%2Findex.do", allow_redirects=False)
+        session.get("https://pass.neu.edu.cn/tpass/login?service=http%3A%2F%2Fjwxt.neu.edu.cn%2Fjwapp%2Fsys%2Fhomeapp%2Findex.do%3FcontextPath%3D%2Fjwapp")
     else:
         session.get("https://webvpn.neu.edu.cn")
         session.headers.update({
@@ -114,7 +114,7 @@ def neucas_qr_login():
 
 def print_welcome():   
     global session
-    response = session.get(set_webvpn("https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/currentUser.do"))
+    response = session.get(set_webvpn("http://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/currentUser.do"))
     response_json = response.json()
     username = response_json["datas"]["userName"]
     userid = response_json["datas"]["userId"]
@@ -123,7 +123,7 @@ def print_welcome():
 
 def get_termcode():
     global session
-    response = session.get(set_webvpn("https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/currentUser.do"))
+    response = session.get(set_webvpn("http://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/currentUser.do"))
     response_json = response.json()
     termcode = response_json["datas"]["welcomeInfo"]["xnxqdm"]
     termname = response_json["datas"]["welcomeInfo"]["xnxqmc"]
@@ -144,7 +144,7 @@ def get_termcode():
 
 def get_campuscode(termcode):
     global session
-    resp = session.get(set_webvpn(f"https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/student/getMyScheduledCampus.do?termCode={termcode}"))
+    resp = session.get(set_webvpn(f"http://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/student/getMyScheduledCampus.do?termCode={termcode}"))
     campuscode = resp.json()["datas"][0]["id"]
     return campuscode
 
@@ -152,8 +152,8 @@ def get_campuscode(termcode):
 def convert_arranged_by_WoDeKeBiao(term):
 
     headers = {
-        "origin": "https://webvpn.neu.edu.cn" if using_webvpn else "https://jwxt.neu.edu.cn",
-        "Referer": set_webvpn('https://jwxt.neu.edu.cn/jwapp/sys/homeapp/home/index.html?av=&contextPath=/jwapp'),
+        "origin": "https://webvpn.neu.edu.cn" if using_webvpn else "http://jwxt.neu.edu.cn",
+        "Referer": set_webvpn('http://jwxt.neu.edu.cn/jwapp/sys/homeapp/home/index.html?av=&contextPath=/jwapp'),
         "user-agent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
         "content-type": 'application/x-www-form-urlencoded;charset=UTF-8',
     }
@@ -168,7 +168,7 @@ def convert_arranged_by_WoDeKeBiao(term):
 
     global session
     response = session.post(
-        set_webvpn('https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/student/getMyScheduleDetail.do'),
+        set_webvpn('http://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/student/getMyScheduleDetail.do'),
         headers=headers,
         data=data,
         verify=False,
@@ -216,7 +216,7 @@ def convert_arranged_by_WoDeKeBiao(term):
     }
 
     response = session.post(
-        set_webvpn('https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/student/getMyScheduleDetail.do'),
+        set_webvpn('http://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/student/getMyScheduleDetail.do'),
         headers=headers,
         data=data,
         verify=False,
@@ -261,8 +261,8 @@ def convert_arranged_by_WoDeKeBiao(term):
 def convert_arranged_by_WoDeKeCheng(term):
 
     headers = {
-        "origin": "https://webvpn.neu.edu.cn" if using_webvpn else "https://jwxt.neu.edu.cn",
-        "Referer": set_webvpn('https://jwxt.neu.edu.cn/jwapp/sys/homeapp/home/index.html?av=&contextPath=/jwapp'),
+        "origin": "https://webvpn.neu.edu.cn" if using_webvpn else "http://jwxt.neu.edu.cn",
+        "Referer": set_webvpn('http://jwxt.neu.edu.cn/jwapp/sys/homeapp/home/index.html?av=&contextPath=/jwapp'),
         "user-agent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
         "content-type": 'application/x-www-form-urlencoded;charset=UTF-8',
     }
@@ -270,7 +270,7 @@ def convert_arranged_by_WoDeKeCheng(term):
 
     global session
     response = session.get(
-        set_webvpn(f'https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/student/courses.do?termCode={term}'),
+        set_webvpn(f'http://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/student/courses.do?termCode={term}'),
         headers=headers,
         verify=False,
     )
@@ -329,7 +329,7 @@ def prettytable_print(list_for_csv):
 def get_first_day(termcode):
     from datetime import datetime
     global session
-    resp = session.get(set_webvpn(f"https://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/getTermWeeks.do?termCode={termcode}"))
+    resp = session.get(set_webvpn(f"http://jwxt.neu.edu.cn/jwapp/sys/homeapp/api/home/getTermWeeks.do?termCode={termcode}"))
     first_day = resp.json()["datas"][0]["startDate"]
     first_day = datetime.strptime(first_day, "%Y-%m-%d %H:%M:%S")
     first_day = int(first_day.timestamp())*1000
