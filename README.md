@@ -22,6 +22,11 @@
 ### Python 脚本
 
 (右侧 Release 可以下载预编译版本)
+>[!TIP]
+>在运行前需要先执行
+>```bash
+>pip install -r requirements.txt
+>```
 
 1. ~连接校园网 或 OpenVPN~ 正确连接网络，校园网外环境自动调用WebVPN
 2. 打开程序，仔细阅读须知，使用绑定了东北大学微信企业号的微信扫描程序显示的二维码
