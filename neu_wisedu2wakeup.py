@@ -162,32 +162,66 @@ def get_campuscode(termcode):
     return campuscode
 
 
+def normalize_weeks(weeks):
+    return weeks.replace(",", "、").replace("(", "").replace(")", "")
+
+
 def process_normal_course(each_class):
-    courseName = each_class["courseName"]
-    dayOfWeek = each_class["dayOfWeek"]
-    beginSection = each_class["beginSection"]
-    endSection = each_class["endSection"]
-    titleDetail = each_class["titleDetail"]
-    weeksAndTeachers = each_class["weeksAndTeachers"]
-    teachers = weeksAndTeachers.split(r"/")[-1]
-    for i in range(1,len(titleDetail)):
-        i = titleDetail[i]
-        if not i[0:1].isdigit():
+    course_name = each_class["courseName"]
+    day_of_week = each_class["dayOfWeek"]
+    begin_section = each_class["beginSection"]
+    end_section = each_class["endSection"]
+    title_detail = each_class.get("titleDetail") or []
+    weeks_and_teachers = each_class.get("weeksAndTeachers") or ""
+    teachers = re.sub(r'\[.*?\]', '', weeks_and_teachers.split(r"/")[-1])
+    rows = []
+
+    # titleDetail[0] is a summary. Every later detail is a separate schedule entry.
+    for detail in title_detail[1:]:
+        if not isinstance(detail, str) or not detail[0:1].isdigit():
             continue
-        append_list = []
-        week = i.split(" ")[0]
-        placeName = i.split(" ")[-1].replace("*","")
-        if placeName.endswith("校区"):
-            placeName = "暂未安排教室"
-        
-        append_list.append(courseName)
-        append_list.append(dayOfWeek)
-        append_list.append(beginSection)
-        append_list.append(endSection)
-        append_list.append(re.sub(r'\[.*?\]', '', teachers))
-        append_list.append(placeName)
-        append_list.append(week.replace(",","、").replace("(","").replace(")",""))
-        return append_list
+
+        parts = detail.split()
+        week = parts[0]
+        place_name = parts[-1].replace("*", "") if len(parts) > 1 else "暂未安排教室"
+        if place_name.endswith("校区"):
+            place_name = "暂未安排教室"
+
+        rows.append([
+            course_name,
+            day_of_week,
+            begin_section,
+            end_section,
+            teachers,
+            place_name,
+            normalize_weeks(week),
+        ])
+
+    return rows
+
+
+def merge_course_locations(rows):
+    merged_rows = []
+    row_indexes = {}
+
+    for row in rows:
+        if not row:
+            continue
+
+        key = tuple(row[:5] + [row[6]])
+        index = row_indexes.get(key)
+        if index is None:
+            merged_rows.append(row.copy())
+            row_indexes[key] = len(merged_rows) - 1
+            continue
+
+        locations = merged_rows[index][5].split("-")
+        if row[5] not in locations:
+            locations.append(row[5])
+            merged_rows[index][5] = "-".join(locations)
+
+    return merged_rows
+
 
 def process_lab_course(each_class):
     courseName = each_class["courseName"]
@@ -237,16 +271,21 @@ def convert_arranged_by_WoDeKeBiao(term):
         verify=False,
     )
 
-    schedule_json = response.json()
-    schedule_list = schedule_json["datas"]
-
+    response.raise_for_status()
+    try:
+        schedule_list = response.json()["datas"]
+        arranged_list = schedule_list["arrangedList"]
+    except (ValueError, KeyError, TypeError) as exc:
+        raise RuntimeError("无法解析南湖校区的课表响应") from exc
+    if not isinstance(arranged_list, list):
+        raise RuntimeError("南湖校区的课表响应不包含课程列表")
 
     list_for_csv = []
-    
-    for each_class in schedule_list["arrangedList"]:
+
+    for each_class in arranged_list:
         
         if len(str(each_class["courseCode"]).split("-")) == 1:
-            list_for_csv.append(process_normal_course(each_class))
+            list_for_csv.extend(process_normal_course(each_class))
         else:
             list_for_csv.append(process_lab_course(each_class))
 
@@ -266,18 +305,23 @@ def convert_arranged_by_WoDeKeBiao(term):
         verify=False,
     )
 
-    schedule_json = response.json()
-    schedule_list = schedule_json["datas"]
+    response.raise_for_status()
+    try:
+        arranged_list = response.json()["datas"]["arrangedList"]
+    except (ValueError, KeyError, TypeError) as exc:
+        raise RuntimeError("无法解析浑南校区的课表响应") from exc
+    if not isinstance(arranged_list, list):
+        raise RuntimeError("浑南校区的课表响应不包含课程列表")
 
-    for each_class in schedule_list["arrangedList"]:
+    for each_class in arranged_list:
         
         if len(str(each_class["courseCode"]).split("-")) == 1:
-            list_for_csv.append(process_normal_course(each_class))
+            list_for_csv.extend(process_normal_course(each_class))
         else:
             list_for_csv.append(process_lab_course(each_class))
 
         
-    return list_for_csv
+    return merge_course_locations(list_for_csv)
         
 
 def convert_arranged_by_WoDeKeCheng(term):

@@ -4,4 +4,8 @@ neu_wisedu2wakeup.dist
 neu_wisedu2wakeup.build
 venv
 schedule.csv
+backlogs.md
 aitest*.py
+
+# DeepSeek Harness agent state and logs
+.dsh/
