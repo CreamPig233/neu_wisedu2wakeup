@@ -57,6 +57,33 @@
         console.log(`共获取到 ${arrangedList.length} 门课程。`);
 
         let csvRows = [];
+
+        function parseLabCourse(item) {
+            let details = Array.isArray(item.titleDetail) ? item.titleDetail : [];
+            let teacherDetail = typeof details[1] === "string" ? details[1].trim() : "";
+            let teacherParts = teacherDetail ? teacherDetail.split(/\s+/) : [];
+            let teacher = teacherParts.length > 1 ? teacherParts[1] : "";
+            let placeParts = String(item.placeName || "").trim().split(/\s+/);
+            let location = placeParts[0] || "";
+            let weeks = String(item.weeksAndTeachers || "").split("[")[0]
+                .replace(/,/g, "\u3001")
+                .replace(/[()]/g, "");
+
+            if (location.endsWith(")")) {
+                location = "\u6682\u672a\u5b89\u6392\u6559\u5ba4";
+            }
+
+            return [
+                item.courseName,
+                item.dayOfWeek,
+                item.beginSection,
+                item.endSection,
+                teacher,
+                location,
+                weeks
+            ];
+        }
+
         // CSV 表头
         csvRows.push(["课程名称", "星期", "开始节数", "结束节数", "老师", "地点", "周数"]);
 
@@ -65,6 +92,12 @@
             let dayOfWeek = item.dayOfWeek;
             let beginSection = item.beginSection;
             let endSection = item.endSection;
+
+            // Lab course titleDetail ends with the lab class, not the classroom.
+            if (typeof courseName === "string" && courseName.startsWith("[\u5b9e]")) {
+                csvRows.push(parseLabCourse(item));
+                return;
+            }
 
             // "weeksAndTeachers"
             let weeksAndTeachers = item.weeksAndTeachers || "";
